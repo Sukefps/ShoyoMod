@@ -1,12 +1,11 @@
-# Shoyo Macro (mod Forge 1.8.9)
-Autor: shoyoo.mc. Mod do lado do cliente, funciona em qualquer launcher.
+# MP-Mod (mod Forge 1.8.9)
+Autor: shoyoo.mc. Mod so do lado do cliente; nao depende de launcher nenhum.
 
-Comandos no chat: /shoyo attack|place|break [on|off], /shoyo cps attack|place <min> <max>, /shoyo status
-Tambem ha teclas (sem tecla padrao) em Controles > Shoyo Macro.
+Comandos no chat: /shoyo attack|place|break|hud [on|off], /shoyo cps attack|place <min> <max>, /shoyo status
+Teclas (sem tecla padrao): Controles > MP-Mod.
 
-Logica: segurando o botao, clica em intervalo aleatorio de 1000/CPSmax ate 1000/CPSmin ms
-(padrao 6-8 CPS). Se a mira estiver num bloco, nao clica (deixa quebrar normal) a menos que
-"break" esteja ligado. Colocar bloco so age com bloco na mao. Use onde macros forem permitidos.
-
-Launcher: o mod envia ao SHOYO LAUNCHER (UDP 127.0.0.1:47653) se a mira esta num bloco; o macro do launcher pausa nessa hora.
-Para usar so o macro do launcher, deixe attack/place do mod desligados (padrao).
+Como funciona (so clica enquanto voce SEGURA o botao):
+- Atacar: clique esquerdo em CPS aleatorio entre o minimo e o maximo (padrao 6-8 = 125-167 ms, de 0 a 20).
+- Mira num bloco: nao clica, o jogo quebra o bloco normalmente (ligue "break" para clicar mesmo assim).
+- Colocar bloco: CPS proprio, so age com BLOCO na mao; comendo, bebendo ou usando item nunca clica.
+- Tudo desligado por padrao. Use onde macros forem permitidos.

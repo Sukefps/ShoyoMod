@@ -12,7 +12,7 @@ apply plugin: 'net.minecraftforge.gradle.forge'
 
 version = "1.0.1"
 group = "com.shoyoo.shoyomod"
-archivesBaseName = "ShoyoMod"
+archivesBaseName = "MP-Mod"
 
 sourceCompatibility = targetCompatibility = '1.8'
 

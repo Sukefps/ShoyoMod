@@ -1,7 +1,7 @@
 [{
-  "modid": "shoyomacro",
-  "name": "Shoyo Macro",
-  "description": "Macro de survival do SHOYO LAUNCHER (1.8.9). Autor: shoyoo.mc",
+  "modid": "mpmod",
+  "name": "MP-Mod",
+  "description": "Macro de survival (1.8.9). Autor: shoyoo.mc",
   "version": "${version}",
   "mcversion": "${mcversion}",
   "authorList": ["shoyoo.mc"]
