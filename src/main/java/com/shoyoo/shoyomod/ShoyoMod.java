@@ -35,7 +35,8 @@ public class ShoyoMod {
     private static final Random rnd = new Random();
 
     private static boolean attack, place, breakBlocks;
-    private static int cpsMin = 6, cpsMax = 8;
+    private static int cpsMin = 6, cpsMax = 8;      // atacar
+    private static int pCpsMin = 6, pCpsMax = 8;     // colocar bloco
     private static Configuration cfg;
 
     private static Method clickMouse, rightClickMouse;
@@ -71,6 +72,8 @@ public class ShoyoMod {
         breakBlocks = cfg.getBoolean("breakBlocks", "macro", false, "Continuar clicando mesmo com a mira num bloco");
         cpsMin = cfg.getInt("cpsMin", "macro", 6, 0, 20, "CPS minimo");
         cpsMax = cfg.getInt("cpsMax", "macro", 8, 0, 20, "CPS maximo");
+        pCpsMin = cfg.getInt("placeCpsMin", "macro", 6, 0, 20, "CPS minimo de colocar bloco");
+        pCpsMax = cfg.getInt("placeCpsMax", "macro", 8, 0, 20, "CPS maximo de colocar bloco");
         if (cfg.hasChanged()) cfg.save();
     }
 
@@ -94,6 +97,8 @@ public class ShoyoMod {
         cfg.get("macro", "breakBlocks", false).set(breakBlocks);
         cfg.get("macro", "cpsMin", 6).set(cpsMin);
         cfg.get("macro", "cpsMax", 8).set(cpsMax);
+        cfg.get("macro", "placeCpsMin", 6).set(pCpsMin);
+        cfg.get("macro", "placeCpsMax", 8).set(pCpsMax);
         cfg.save();
     }
 
@@ -110,8 +115,9 @@ public class ShoyoMod {
         if (kBreak.isPressed()) { breakBlocks = !breakBlocks; save(); say("quebrar bloco " + onOff(breakBlocks)); }
     }
 
-    private long intervalNs() {
-        int hi = Math.max(cpsMin, cpsMax), lo = Math.min(cpsMin, cpsMax);
+    private long intervalNs(boolean forPlace) {
+        int a = forPlace ? pCpsMin : cpsMin, b = forPlace ? pCpsMax : cpsMax;
+        int hi = Math.max(a, b), lo = Math.min(a, b);
         double fast = 1000.0 / hi;
         double slow = 1000.0 / Math.max(lo, 1);
         double ms = slow <= fast ? fast : fast + rnd.nextDouble() * (slow - fast);
@@ -122,37 +128,37 @@ public class ShoyoMod {
     public void onRender(TickEvent.RenderTickEvent e) {
         if (e.phase != TickEvent.Phase.START) return;
         boolean ready = mc.thePlayer != null && mc.theWorld != null && mc.currentScreen == null
-                && mc.inGameHasFocus && Math.max(cpsMin, cpsMax) > 0;
+                && mc.inGameHasFocus;
         long now = System.nanoTime();
 
         // ATACAR: segurando o botao; com a mira num bloco deixa o jogo quebrar normal (a menos que "break" ligado)
         boolean aimBlock = mc.objectMouseOver != null
                 && mc.objectMouseOver.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK;
         sendAim(ready && aimBlock);
-        boolean doAttack = ready && attack && mc.gameSettings.keyBindAttack.isKeyDown()
+        boolean doAttack = ready && attack && Math.max(cpsMin, cpsMax) > 0 && mc.gameSettings.keyBindAttack.isKeyDown()
                 && (breakBlocks || !aimBlock);
         if (!doAttack) {
             nextAttackNs = 0L; // condicoes falharam: reinicia o temporizador
         } else {
             if (nextAttackNs == 0L) nextAttackNs = now;
             if (now >= nextAttackNs) {
-                nextAttackNs += intervalNs();
-                if (nextAttackNs < now) nextAttackNs = now + intervalNs();
+                nextAttackNs += intervalNs(false);
+                if (nextAttackNs < now) nextAttackNs = now + intervalNs(false);
                 invoke(clickMouse);
             }
         }
 
         // COLOCAR BLOCO: segurando o botao e com bloco na mao
         ItemStack held = ready ? mc.thePlayer.getHeldItem() : null;
-        boolean doPlace = ready && place && mc.gameSettings.keyBindUseItem.isKeyDown()
+        boolean doPlace = ready && place && Math.max(pCpsMin, pCpsMax) > 0 && mc.gameSettings.keyBindUseItem.isKeyDown()
                 && held != null && held.getItem() instanceof ItemBlock && !mc.thePlayer.isUsingItem();
         if (!doPlace) {
             nextPlaceNs = 0L;
         } else {
             if (nextPlaceNs == 0L) nextPlaceNs = now;
             if (now >= nextPlaceNs) {
-                nextPlaceNs += intervalNs();
-                if (nextPlaceNs < now) nextPlaceNs = now + intervalNs();
+                nextPlaceNs += intervalNs(true);
+                if (nextPlaceNs < now) nextPlaceNs = now + intervalNs(true);
                 invoke(rightClickMouse);
             }
         }
@@ -165,7 +171,7 @@ public class ShoyoMod {
     public static class ShoyoCommand extends CommandBase {
         @Override public String getCommandName() { return "shoyo"; }
         @Override public String getCommandUsage(ICommandSender s) {
-            return "/shoyo attack|place|break [on|off] | cps <min> <max> | status";
+            return "/shoyo attack|place|break [on|off] | cps attack|place <min> <max> | status";
         }
         @Override public int getRequiredPermissionLevel() { return 0; }
         @Override public boolean canCommandSenderUseCommand(ICommandSender s) { return true; }
@@ -174,17 +180,19 @@ public class ShoyoMod {
         public void processCommand(ICommandSender sender, String[] a) {
             if (a.length == 0 || a[0].equalsIgnoreCase("status")) {
                 say("atacar " + onOff(attack) + ", colocar " + onOff(place) + ", quebrar bloco " + onOff(breakBlocks)
-                        + ", CPS " + cpsMin + "-" + cpsMax);
+                        + ", CPS atacar " + cpsMin + "-" + cpsMax + ", colocar " + pCpsMin + "-" + pCpsMax);
                 return;
             }
             String k = a[0].toLowerCase();
-            if (k.equals("cps") && a.length >= 3) {
+            if (k.equals("cps") && a.length >= 4) {
                 try {
-                    cpsMin = Math.max(0, Math.min(20, Integer.parseInt(a[1])));
-                    cpsMax = Math.max(0, Math.min(20, Integer.parseInt(a[2])));
+                    boolean pl = a[1].equalsIgnoreCase("place");
+                    int mn = Math.max(0, Math.min(20, Integer.parseInt(a[2])));
+                    int mx = Math.max(0, Math.min(20, Integer.parseInt(a[3])));
+                    if (pl) { pCpsMin = mn; pCpsMax = mx; } else { cpsMin = mn; cpsMax = mx; }
                     save();
-                    say("CPS " + cpsMin + "-" + cpsMax);
-                } catch (NumberFormatException ex) { say("use numeros de 0 a 20"); }
+                    say("CPS de " + (pl ? "colocar" : "atacar") + ": " + mn + "-" + mx);
+                } catch (NumberFormatException ex) { say("use: /shoyo cps attack|place <min> <max> (0 a 20)"); }
                 return;
             }
             if (k.equals("attack") || k.equals("place") || k.equals("break")) {

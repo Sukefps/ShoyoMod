@@ -1,7 +1,7 @@
 # Shoyo Macro (mod Forge 1.8.9)
 Autor: shoyoo.mc. Mod do lado do cliente, funciona em qualquer launcher.
 
-Comandos no chat: /shoyo attack|place|break [on|off], /shoyo cps <min> <max>, /shoyo status
+Comandos no chat: /shoyo attack|place|break [on|off], /shoyo cps attack|place <min> <max>, /shoyo status
 Tambem ha teclas (sem tecla padrao) em Controles > Shoyo Macro.
 
 Logica: segurando o botao, clica em intervalo aleatorio de 1000/CPSmax ate 1000/CPSmin ms
