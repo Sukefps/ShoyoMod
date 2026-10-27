@@ -36,6 +36,7 @@ public class ShoyoMod {
     private static boolean attack, place, breakBlocks, hud;
     private static final ArrayDeque<Long> clicks = new ArrayDeque<Long>();
     private static long totalClicks = 0L;
+    private static String stateText = "";
     private static int cpsMin = 6, cpsMax = 8;      // atacar
     private static int pCpsMin = 6, pCpsMax = 8;     // colocar bloco
     private static Configuration cfg;
@@ -114,11 +115,19 @@ public class ShoyoMod {
                 && mc.inGameHasFocus;
         long now = System.nanoTime();
 
-        // ATACAR: segurando o botao; com a mira num bloco deixa o jogo quebrar normal (a menos que "break" ligado)
-        boolean aimBlock = mc.objectMouseOver != null
-                && mc.objectMouseOver.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK;
+        // Estado do jogo: o que a mira esta vendo, se esta quebrando bloco ou usando item (comendo/bebendo)
+        MovingObjectPosition mop = mc.objectMouseOver;
+        boolean aimBlock = mop != null && mop.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK;
+        boolean aimEntity = mop != null && mop.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY;
+        boolean usingItem = ready && mc.thePlayer.isUsingItem();
+        boolean mining = ready && mc.playerController != null && mc.playerController.getIsHittingBlock();
+        stateText = "alvo: " + (aimBlock ? "bloco" : aimEntity ? "entidade" : "ar")
+                + (mining ? " | quebrando" : "") + (usingItem ? " | usando item" : "");
+
+        // ATACAR: segurando o botao. Nunca clica se estiver comendo/usando item, quebrando bloco ou
+        // com a mira num bloco (a menos que "break" esteja ligado)
         boolean doAttack = ready && attack && Math.max(cpsMin, cpsMax) > 0 && mc.gameSettings.keyBindAttack.isKeyDown()
-                && (breakBlocks || !aimBlock);
+                && !usingItem && (breakBlocks || (!aimBlock && !mining));
         if (!doAttack) {
             nextAttackNs = 0L; // condicoes falharam: reinicia o temporizador
         } else {
@@ -161,6 +170,7 @@ public class ShoyoMod {
         long now = System.currentTimeMillis();
         while (!clicks.isEmpty() && now - clicks.getFirst() > 1000) clicks.removeFirst();
         mc.fontRendererObj.drawStringWithShadow("CPS " + clicks.size() + "  |  total " + totalClicks, 4, 4, 0xFFFFFF);
+        mc.fontRendererObj.drawStringWithShadow(stateText, 4, 16, 0xAAAAAA);
     }
 
     public static class ShoyoCommand extends CommandBase {
