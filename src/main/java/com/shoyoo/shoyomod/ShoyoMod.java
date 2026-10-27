@@ -24,6 +24,9 @@ import net.minecraftforge.fml.relauncher.ReflectionHelper;
 import org.lwjgl.input.Keyboard;
 
 import java.lang.reflect.Method;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.util.ArrayDeque;
 import java.util.Random;
 
@@ -33,12 +36,12 @@ public class ShoyoMod {
     private static final Minecraft mc = Minecraft.getMinecraft();
     private static final Random rnd = new Random();
 
-    private static boolean attack, place, breakBlocks, hud;
+    private static volatile boolean attack, place, breakBlocks, hud;
     private static final ArrayDeque<Long> clicks = new ArrayDeque<Long>();
     private static long totalClicks = 0L;
     private static String stateText = "";
-    private static int cpsMin = 6, cpsMax = 8;      // atacar
-    private static int pCpsMin = 6, pCpsMax = 8;     // colocar bloco
+    private static volatile int cpsMin = 6, cpsMax = 8;      // atacar
+    private static volatile int pCpsMin = 6, pCpsMax = 8;     // colocar bloco
     private static Configuration cfg;
 
     private static Method clickMouse, rightClickMouse;
@@ -71,7 +74,63 @@ public class ShoyoMod {
         ClientRegistry.registerKeyBinding(kPlace);
         ClientRegistry.registerKeyBinding(kBreak);
         MinecraftForge.EVENT_BUS.register(this);
+        startLink();
         ClientCommandHandler.instance.registerCommand(new ShoyoCommand());
+    }
+
+    // ---- Ligacao com o SHOYO LAUNCHER (opcional): o launcher manda as configuracoes, o mod clica ----
+    private static final int PORT_TO_LAUNCHER = 47653;
+    private static final int PORT_FROM_LAUNCHER = 47654;
+
+    private static void startLink() {
+        Thread rx = new Thread(new Runnable() {
+            public void run() {
+                try {
+                    DatagramSocket sock = new DatagramSocket(PORT_FROM_LAUNCHER, InetAddress.getByName("127.0.0.1"));
+                    byte[] buf = new byte[128];
+                    DatagramPacket p = new DatagramPacket(buf, buf.length);
+                    while (true) {
+                        p.setLength(buf.length);
+                        sock.receive(p);
+                        applyRemote(new String(buf, 0, p.getLength(), "US-ASCII").trim());
+                    }
+                } catch (Throwable ignored) { }
+            }
+        }, "MP-Mod link rx");
+        rx.setDaemon(true);
+        rx.start();
+
+        Thread hb = new Thread(new Runnable() {
+            public void run() {
+                try {
+                    DatagramSocket tx = new DatagramSocket();
+                    InetAddress lo = InetAddress.getByName("127.0.0.1");
+                    byte[] b = "000".getBytes("US-ASCII");
+                    while (true) {
+                        tx.send(new DatagramPacket(b, b.length, lo, PORT_TO_LAUNCHER));
+                        Thread.sleep(500);
+                    }
+                } catch (Throwable ignored) { }
+            }
+        }, "MP-Mod link hb");
+        hb.setDaemon(true);
+        hb.start();
+    }
+
+    /** "S atacar colocar break hud atkMin atkMax plcMin plcMax" */
+    private static void applyRemote(String m) {
+        try {
+            String[] a = m.split(" ");
+            if (a.length < 9 || !a[0].equals("S")) return;
+            attack = a[1].equals("1");
+            place = a[2].equals("1");
+            breakBlocks = a[3].equals("1");
+            hud = a[4].equals("1");
+            cpsMin = Integer.parseInt(a[5]);
+            cpsMax = Integer.parseInt(a[6]);
+            pCpsMin = Integer.parseInt(a[7]);
+            pCpsMax = Integer.parseInt(a[8]);
+        } catch (Throwable ignored) { }
     }
 
     private static void save() {

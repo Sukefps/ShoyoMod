@@ -9,3 +9,5 @@ Como funciona (so clica enquanto voce SEGURA o botao):
 - Mira num bloco: nao clica, o jogo quebra o bloco normalmente (ligue "break" para clicar mesmo assim).
 - Colocar bloco: CPS proprio, so age com BLOCO na mao; comendo, bebendo ou usando item nunca clica.
 - Tudo desligado por padrao. Use onde macros forem permitidos.
+
+Ligado ao SHOYO LAUNCHER: o launcher envia as configuracoes (interruptores e CPS) ao mod por UDP local (127.0.0.1:47654) e o MP-Mod faz os cliques, com as pausas de bloco e comida. Sem o mod, o launcher clica sozinho.
