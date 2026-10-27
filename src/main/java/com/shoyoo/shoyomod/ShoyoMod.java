@@ -40,7 +40,7 @@ public class ShoyoMod {
     private static final Minecraft mc = Minecraft.getMinecraft();
     private static final Random rnd = new Random();
 
-    private static volatile boolean attack, place, breakBlocks, hud;
+    private static volatile boolean attack, place, breakBlocks, hud, needEntity;
     private static final ArrayDeque<Long> clicks = new ArrayDeque<Long>();
     private static long totalClicks = 0L;
     private static String stateText = "";
@@ -62,6 +62,7 @@ public class ShoyoMod {
         attack = cfg.getBoolean("attack", "macro", false, "Clicar sozinho para atacar (segurando o botao)");
         place = cfg.getBoolean("place", "macro", false, "Clicar sozinho para colocar bloco (segurando o botao)");
         breakBlocks = cfg.getBoolean("breakBlocks", "macro", false, "Continuar clicando mesmo com a mira num bloco");
+        needEntity = cfg.getBoolean("needEntity", "macro", false, "So clicar (atacar) com entidade perto");
         radius = cfg.getInt("radius", "macro", 6, 1, 20, "Distancia (blocos) para uma entidade contar como perto");
         hud = cfg.getBoolean("hud", "macro", false, "Mostrar painel de CPS na tela");
         cpsMin = cfg.getInt("cpsMin", "macro", 6, 0, 20, "CPS minimo");
@@ -147,6 +148,7 @@ public class ShoyoMod {
         cfg.get("macro", "breakBlocks", false).set(breakBlocks);
         cfg.get("macro", "hud", false).set(hud);
         cfg.get("macro", "radius", 6).set(radius);
+        cfg.get("macro", "needEntity", false).set(needEntity);
         cfg.get("macro", "cpsMin", 6).set(cpsMin);
         cfg.get("macro", "cpsMax", 8).set(cpsMax);
         cfg.get("macro", "placeCpsMin", 6).set(pCpsMin);
@@ -192,10 +194,10 @@ public class ShoyoMod {
         stateText = "alvo: " + (aimBlock ? "bloco" : aimEntity ? "entidade" : "ar")
                 + (near ? " | entidade perto" : "") + (mining ? " | quebrando" : "") + (usingItem ? " | usando item" : "");
 
-        // ATACAR: clica sem parar enquanto voce segura o botao, mas SO com entidade perto.
-        // Sem entidade perto, quebrando bloco, com a mira num bloco ou comendo: nao clica (quebra/come normal).
+        // ATACAR: clica sem parar enquanto voce segura o botao (com ou sem entidade perto; se "entity" estiver ligado, so com entidade perto).
+        // Quebrando bloco, com a mira num bloco ou comendo: nao clica (quebra/come normal).
         boolean doAttack = ready && attack && Math.max(cpsMin, cpsMax) > 0 && isDown(mc.gameSettings.keyBindAttack)
-                && near && !usingItem && (breakBlocks || (!aimBlock && !mining));
+                && (!needEntity || near) && !usingItem && (breakBlocks || (!aimBlock && !mining));
         if (!doAttack) {
             nextAttackNs = 0L; // condicoes falharam: reinicia o temporizador
         } else {
@@ -272,7 +274,7 @@ public class ShoyoMod {
     public static class ShoyoCommand extends CommandBase {
         @Override public String getCommandName() { return "shoyo"; }
         @Override public String getCommandUsage(ICommandSender s) {
-            return "/shoyo attack|place|break|hud [on|off] | radius <1-20> | cps attack|place <min> <max> | status";
+            return "/shoyo attack|place|break|hud|entity [on|off] | radius <1-20> | cps attack|place <min> <max> | status";
         }
         @Override public int getRequiredPermissionLevel() { return 0; }
         @Override public boolean canCommandSenderUseCommand(ICommandSender s) { return true; }
@@ -294,6 +296,12 @@ public class ShoyoMod {
                     save();
                     say("CPS de " + (pl ? "colocar" : "atacar") + ": " + mn + "-" + mx);
                 } catch (NumberFormatException ex) { say("use: /shoyo cps attack|place <min> <max> (0 a 20)"); }
+                return;
+            }
+            if (k.equals("entity")) {
+                needEntity = a.length >= 2 ? a[1].equalsIgnoreCase("on") : !needEntity;
+                save();
+                say("so clicar com entidade perto: " + onOff(needEntity));
                 return;
             }
             if (k.equals("radius") && a.length >= 2) {
