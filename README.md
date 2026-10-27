@@ -11,3 +11,5 @@ Como funciona (so clica enquanto voce SEGURA o botao):
 - Tudo desligado por padrao. Use onde macros forem permitidos.
 
 Ligado ao SHOYO LAUNCHER: o launcher envia as configuracoes (interruptores e CPS) ao mod por UDP local (127.0.0.1:47654) e o MP-Mod faz os cliques, com as pausas de bloco e comida. Sem o mod, o launcher clica sozinho.
+
+Atacar: clica sem parar enquanto segura o botao, mas so com entidade (mob/jogador) a ate 'radius' blocos (padrao 6; /shoyo radius N). Sem entidade perto, quebrando bloco ou comendo: nao clica.

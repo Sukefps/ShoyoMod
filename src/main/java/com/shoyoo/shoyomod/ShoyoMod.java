@@ -1,6 +1,9 @@
 package com.shoyoo.shoyomod;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.entity.item.EntityArmorStand;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.ICommandSender;
@@ -41,6 +44,9 @@ public class ShoyoMod {
     private static final ArrayDeque<Long> clicks = new ArrayDeque<Long>();
     private static long totalClicks = 0L;
     private static String stateText = "";
+    private static volatile int radius = 6;          // distancia (blocos) para considerar uma entidade "perto"
+    private boolean nearCached = false;
+    private long nearCheckMs = 0L;
     private static volatile int cpsMin = 6, cpsMax = 8;      // atacar
     private static volatile int pCpsMin = 6, pCpsMax = 8;     // colocar bloco
     private static Configuration cfg;
@@ -56,6 +62,7 @@ public class ShoyoMod {
         attack = cfg.getBoolean("attack", "macro", false, "Clicar sozinho para atacar (segurando o botao)");
         place = cfg.getBoolean("place", "macro", false, "Clicar sozinho para colocar bloco (segurando o botao)");
         breakBlocks = cfg.getBoolean("breakBlocks", "macro", false, "Continuar clicando mesmo com a mira num bloco");
+        radius = cfg.getInt("radius", "macro", 6, 1, 20, "Distancia (blocos) para uma entidade contar como perto");
         hud = cfg.getBoolean("hud", "macro", false, "Mostrar painel de CPS na tela");
         cpsMin = cfg.getInt("cpsMin", "macro", 6, 0, 20, "CPS minimo");
         cpsMax = cfg.getInt("cpsMax", "macro", 8, 0, 20, "CPS maximo");
@@ -139,6 +146,7 @@ public class ShoyoMod {
         cfg.get("macro", "place", false).set(place);
         cfg.get("macro", "breakBlocks", false).set(breakBlocks);
         cfg.get("macro", "hud", false).set(hud);
+        cfg.get("macro", "radius", 6).set(radius);
         cfg.get("macro", "cpsMin", 6).set(cpsMin);
         cfg.get("macro", "cpsMax", 8).set(cpsMax);
         cfg.get("macro", "placeCpsMin", 6).set(pCpsMin);
@@ -180,13 +188,14 @@ public class ShoyoMod {
         boolean aimEntity = mop != null && mop.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY;
         boolean usingItem = ready && mc.thePlayer.isUsingItem();
         boolean mining = ready && mc.playerController != null && mc.playerController.getIsHittingBlock();
+        boolean near = ready && (aimEntity || entityNear());
         stateText = "alvo: " + (aimBlock ? "bloco" : aimEntity ? "entidade" : "ar")
-                + (mining ? " | quebrando" : "") + (usingItem ? " | usando item" : "");
+                + (near ? " | entidade perto" : "") + (mining ? " | quebrando" : "") + (usingItem ? " | usando item" : "");
 
-        // ATACAR: segurando o botao. Nunca clica se estiver comendo/usando item, quebrando bloco ou
-        // com a mira num bloco (a menos que "break" esteja ligado)
+        // ATACAR: clica sem parar enquanto voce segura o botao, mas SO com entidade perto.
+        // Sem entidade perto, quebrando bloco, com a mira num bloco ou comendo: nao clica (quebra/come normal).
         boolean doAttack = ready && attack && Math.max(cpsMin, cpsMax) > 0 && isDown(mc.gameSettings.keyBindAttack)
-                && !usingItem && (breakBlocks || (!aimBlock && !mining));
+                && near && !usingItem && (breakBlocks || (!aimBlock && !mining));
         if (!doAttack) {
             nextAttackNs = 0L; // condicoes falharam: reinicia o temporizador
         } else {
@@ -212,6 +221,23 @@ public class ShoyoMod {
                 invoke(rightClickMouse);
             }
         }
+    }
+
+    /** Tem mob/jogador vivo (nao armor stand) a ate "radius" blocos? Verificado a cada 100 ms. */
+    private boolean entityNear() {
+        long t = System.currentTimeMillis();
+        if (t - nearCheckMs < 100) return nearCached;
+        nearCheckMs = t;
+        boolean found = false;
+        try {
+            for (Object o : mc.theWorld.loadedEntityList) {
+                Entity en = (Entity) o;
+                if (en == mc.thePlayer || en.isDead || !(en instanceof EntityLivingBase) || en instanceof EntityArmorStand) continue;
+                if (en.getDistanceToEntity(mc.thePlayer) <= radius) { found = true; break; }
+            }
+        } catch (Throwable ignored) { }
+        nearCached = found;
+        return found;
     }
 
     /** Estado do botao lido direto a cada quadro (sem esperar o tick de 50 ms do jogo): clique instantaneo ao apertar */
@@ -246,7 +272,7 @@ public class ShoyoMod {
     public static class ShoyoCommand extends CommandBase {
         @Override public String getCommandName() { return "shoyo"; }
         @Override public String getCommandUsage(ICommandSender s) {
-            return "/shoyo attack|place|break|hud [on|off] | cps attack|place <min> <max> | status";
+            return "/shoyo attack|place|break|hud [on|off] | radius <1-20> | cps attack|place <min> <max> | status";
         }
         @Override public int getRequiredPermissionLevel() { return 0; }
         @Override public boolean canCommandSenderUseCommand(ICommandSender s) { return true; }
@@ -268,6 +294,14 @@ public class ShoyoMod {
                     save();
                     say("CPS de " + (pl ? "colocar" : "atacar") + ": " + mn + "-" + mx);
                 } catch (NumberFormatException ex) { say("use: /shoyo cps attack|place <min> <max> (0 a 20)"); }
+                return;
+            }
+            if (k.equals("radius") && a.length >= 2) {
+                try {
+                    radius = Math.max(1, Math.min(20, Integer.parseInt(a[1])));
+                    save();
+                    say("entidade perto = ate " + radius + " blocos");
+                } catch (NumberFormatException ex) { say("use: /shoyo radius <1 a 20>"); }
                 return;
             }
             if (k.equals("hud")) {
