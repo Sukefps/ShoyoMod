@@ -8,6 +8,9 @@ import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.ICommandSender;
 import net.minecraft.item.ItemBlock;
+import net.minecraft.item.ItemBow;
+import net.minecraft.item.ItemFood;
+import net.minecraft.item.ItemPotion;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.MovingObjectPosition;
@@ -21,6 +24,7 @@ import net.minecraftforge.fml.common.Mod.EventHandler;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.relauncher.ReflectionHelper;
@@ -44,6 +48,9 @@ public class ShoyoMod {
     private static final ArrayDeque<Long> clicks = new ArrayDeque<Long>();
     private static long totalClicks = 0L;
     private static String stateText = "";
+    private static volatile long joinedAtMs = 0L;
+    // estado enviado ao launcher: mira em bloco / bloco na mao / comendo-usando item / quebrando bloco
+    private static volatile String stateCode = "0000";
     private static volatile int radius = 6;          // distancia (blocos) para considerar uma entidade "perto"
     private boolean nearCached = false;
     private long nearCheckMs = 0L;
@@ -114,10 +121,10 @@ public class ShoyoMod {
                 try {
                     DatagramSocket tx = new DatagramSocket();
                     InetAddress lo = InetAddress.getByName("127.0.0.1");
-                    byte[] b = "000".getBytes("US-ASCII");
                     while (true) {
+                        byte[] b = stateCode.getBytes("US-ASCII");
                         tx.send(new DatagramPacket(b, b.length, lo, PORT_TO_LAUNCHER));
-                        Thread.sleep(500);
+                        Thread.sleep(100);
                     }
                 } catch (Throwable ignored) { }
             }
@@ -163,6 +170,14 @@ public class ShoyoMod {
     private static String onOff(boolean b) { return b ? "ligado" : "desligado"; }
 
     @SubscribeEvent
+    public void onJoin(EntityJoinWorldEvent e) {
+        if (e.entity == mc.thePlayer) {
+            joinedAtMs = System.currentTimeMillis();
+            say("carregado! atacar " + onOff(attack) + ", colocar " + onOff(place) + ". Use /shoyo status");
+        }
+    }
+
+    @SubscribeEvent
     public void onKey(InputEvent.KeyInputEvent e) {
         if (kAttack.isPressed()) { attack = !attack; save(); say("atacar " + onOff(attack)); }
         if (kPlace.isPressed()) { place = !place; save(); say("colocar bloco " + onOff(place)); }
@@ -192,7 +207,15 @@ public class ShoyoMod {
         boolean mining = ready && mc.playerController != null && mc.playerController.getIsHittingBlock();
         boolean near = ready && (aimEntity || entityNear());
         stateText = "alvo: " + (aimBlock ? "bloco" : aimEntity ? "entidade" : "ar")
-                + (near ? " | entidade perto" : "") + (mining ? " | quebrando" : "") + (usingItem ? " | usando item" : "");
+                + (near ? " | entidade perto" : "") + (mining ? " | quebrando" : "") + (usingItem ? " | usando item" : "")
+                + " | botao: " + (ready && isDown(mc.gameSettings.keyBindAttack) ? "apertado" : "solto")
+                + " | atacar " + onOff(attack);
+
+        ItemStack curItem = ready ? mc.thePlayer.getHeldItem() : null;
+        boolean holdsBlock = curItem != null && curItem.getItem() instanceof ItemBlock;
+        boolean usingAny = usingItem || (curItem != null && (curItem.getItem() instanceof ItemFood
+                || curItem.getItem() instanceof ItemPotion || curItem.getItem() instanceof ItemBow));
+        stateCode = ((ready && aimBlock) ? "1" : "0") + (holdsBlock ? "1" : "0") + (usingAny ? "1" : "0") + (mining ? "1" : "0");
 
         // ATACAR: clica sem parar enquanto voce segura o botao (com ou sem entidade perto; se "entity" estiver ligado, so com entidade perto).
         // Quebrando bloco, com a mira num bloco ou comendo: nao clica (quebra/come normal).
@@ -264,10 +287,11 @@ public class ShoyoMod {
 
     @SubscribeEvent
     public void onOverlay(RenderGameOverlayEvent.Post e) {
-        if (!hud || e.type != RenderGameOverlayEvent.ElementType.ALL || mc.thePlayer == null) return;
+        boolean recent = System.currentTimeMillis() - joinedAtMs < 15000;
+        if ((!hud && !recent) || e.type != RenderGameOverlayEvent.ElementType.ALL || mc.thePlayer == null) return;
         long now = System.currentTimeMillis();
         while (!clicks.isEmpty() && now - clicks.getFirst() > 1000) clicks.removeFirst();
-        mc.fontRendererObj.drawStringWithShadow("CPS " + clicks.size() + "  |  total " + totalClicks, 4, 4, 0xFFFFFF);
+        mc.fontRendererObj.drawStringWithShadow("MP-Mod 1.0.1  |  CPS " + clicks.size() + "  |  total " + totalClicks, 4, 4, 0xFFFFFF);
         mc.fontRendererObj.drawStringWithShadow(stateText, 4, 16, 0xAAAAAA);
     }
 
