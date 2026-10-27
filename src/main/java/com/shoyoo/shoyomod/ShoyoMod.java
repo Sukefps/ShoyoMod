@@ -22,6 +22,7 @@ import net.minecraftforge.fml.common.gameevent.InputEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.relauncher.ReflectionHelper;
 import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 
 import java.lang.reflect.Method;
 import java.net.DatagramPacket;
@@ -170,8 +171,7 @@ public class ShoyoMod {
     @SubscribeEvent
     public void onRender(TickEvent.RenderTickEvent e) {
         if (e.phase != TickEvent.Phase.START) return;
-        boolean ready = mc.thePlayer != null && mc.theWorld != null && mc.currentScreen == null
-                && mc.inGameHasFocus;
+        boolean ready = mc.thePlayer != null && mc.theWorld != null && mc.currentScreen == null;
         long now = System.nanoTime();
 
         // Estado do jogo: o que a mira esta vendo, se esta quebrando bloco ou usando item (comendo/bebendo)
@@ -185,7 +185,7 @@ public class ShoyoMod {
 
         // ATACAR: segurando o botao. Nunca clica se estiver comendo/usando item, quebrando bloco ou
         // com a mira num bloco (a menos que "break" esteja ligado)
-        boolean doAttack = ready && attack && Math.max(cpsMin, cpsMax) > 0 && mc.gameSettings.keyBindAttack.isKeyDown()
+        boolean doAttack = ready && attack && Math.max(cpsMin, cpsMax) > 0 && isDown(mc.gameSettings.keyBindAttack)
                 && !usingItem && (breakBlocks || (!aimBlock && !mining));
         if (!doAttack) {
             nextAttackNs = 0L; // condicoes falharam: reinicia o temporizador
@@ -200,7 +200,7 @@ public class ShoyoMod {
 
         // COLOCAR BLOCO: segurando o botao e com bloco na mao
         ItemStack held = ready ? mc.thePlayer.getHeldItem() : null;
-        boolean doPlace = ready && place && Math.max(pCpsMin, pCpsMax) > 0 && mc.gameSettings.keyBindUseItem.isKeyDown()
+        boolean doPlace = ready && place && Math.max(pCpsMin, pCpsMax) > 0 && isDown(mc.gameSettings.keyBindUseItem)
                 && held != null && held.getItem() instanceof ItemBlock && !mc.thePlayer.isUsingItem();
         if (!doPlace) {
             nextPlaceNs = 0L;
@@ -211,6 +211,17 @@ public class ShoyoMod {
                 if (nextPlaceNs < now) nextPlaceNs = now + intervalNs(true);
                 invoke(rightClickMouse);
             }
+        }
+    }
+
+    /** Estado do botao lido direto a cada quadro (sem esperar o tick de 50 ms do jogo): clique instantaneo ao apertar */
+    private static boolean isDown(KeyBinding kb) {
+        if (kb.isKeyDown()) return true;
+        try {
+            int code = kb.getKeyCode();
+            return code < 0 ? Mouse.isButtonDown(code + 100) : (code > 0 && Keyboard.isKeyDown(code));
+        } catch (Throwable t) {
+            return false;
         }
     }
 
