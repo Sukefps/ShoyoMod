@@ -62,6 +62,7 @@ public class ShoyoMod {
     private static Configuration cfg;
 
     private static Method clickMouse;
+    private static volatile boolean openGuiNext = false;
     private static KeyBinding kAttack, kPlace, kBreak, kGui;
 
     private long nextAttackNs = 0L, nextPlaceNs = 0L;
@@ -267,6 +268,10 @@ public class ShoyoMod {
 
     @SubscribeEvent
     public void onTick(TickEvent.ClientTickEvent e) {
+        if (e.phase == TickEvent.Phase.END && openGuiNext && mc.thePlayer != null && mc.currentScreen == null) {
+            openGuiNext = false;
+            mc.displayGuiScreen(new ShoyoGui());
+        }
         if (e.phase != TickEvent.Phase.START) return;
         if (!place || Math.max(pCpsMin, pCpsMax) <= 0 || mc.thePlayer == null || mc.theWorld == null || mc.currentScreen != null) return;
         if (!mc.gameSettings.keyBindUseItem.isKeyDown()) return;
@@ -420,7 +425,11 @@ public class ShoyoMod {
 
         @Override
         public void processCommand(ICommandSender sender, String[] a) {
-            if (a.length == 0 || a[0].equalsIgnoreCase("status")) {
+            if (a.length == 0 || a[0].equalsIgnoreCase("gui") || a[0].equalsIgnoreCase("menu")) {
+                openGuiNext = true; // abre a tela no proximo tick (sem teclado: use /shoyo)
+                return;
+            }
+            if (a[0].equalsIgnoreCase("status")) {
                 say("atacar " + onOff(attack) + ", colocar " + onOff(place) + ", quebrar bloco " + onOff(breakBlocks)
                         + ", CPS atacar " + cpsMin + "-" + cpsMax + ", colocar " + pCpsMin + "-" + pCpsMax);
                 return;
