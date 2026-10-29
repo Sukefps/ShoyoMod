@@ -47,7 +47,7 @@ public class ShoyoMod {
     private static final Minecraft mc = Minecraft.getMinecraft();
     private static final Random rnd = new Random();
 
-    private static volatile boolean attack, place, breakBlocks, hud, needEntity;
+    private static volatile boolean attack, place, breakBlocks, hud, needEntity, placeSprint, placeGround;
     private static final ArrayDeque<Long> clicks = new ArrayDeque<Long>();
     private static long totalClicks = 0L;
     private static String stateText = "";
@@ -74,6 +74,8 @@ public class ShoyoMod {
         place = cfg.getBoolean("place", "macro", false, "Clicar sozinho para colocar bloco (segurando o botao)");
         breakBlocks = cfg.getBoolean("breakBlocks", "macro", false, "Continuar clicando mesmo com a mira num bloco");
         needEntity = cfg.getBoolean("needEntity", "macro", false, "So clicar (atacar) com entidade perto");
+        placeSprint = cfg.getBoolean("placeSprintOnly", "macro", false, "Colocar rapido so correndo");
+        placeGround = cfg.getBoolean("placeGroundOnly", "macro", false, "Colocar rapido so no chao");
         radius = cfg.getInt("radius", "macro", 6, 1, 20, "Distancia (blocos) para uma entidade contar como perto");
         hud = cfg.getBoolean("hud", "macro", false, "Mostrar painel de CPS na tela");
         cpsMin = cfg.getInt("cpsMin", "macro", 6, 0, 20, "CPS minimo");
@@ -160,6 +162,8 @@ public class ShoyoMod {
         cfg.get("macro", "place", false).set(place);
         cfg.get("macro", "breakBlocks", false).set(breakBlocks);
         cfg.get("macro", "hud", false).set(hud);
+        cfg.get("macro", "placeSprintOnly", false).set(placeSprint);
+        cfg.get("macro", "placeGroundOnly", false).set(placeGround);
         cfg.get("macro", "radius", 6).set(radius);
         cfg.get("macro", "needEntity", false).set(needEntity);
         cfg.get("macro", "cpsMin", 6).set(cpsMin);
@@ -277,6 +281,8 @@ public class ShoyoMod {
         if (!mc.gameSettings.keyBindUseItem.isKeyDown()) return;
         ItemStack held = mc.thePlayer.getHeldItem();
         if (held == null || !(held.getItem() instanceof ItemBlock) || mc.thePlayer.isUsingItem()) return;
+        if (placeSprint && !mc.thePlayer.isSprinting()) return;
+        if (placeGround && !mc.thePlayer.onGround) return;
         java.lang.reflect.Field f = delayField();
         if (f == null) return;
         try {
@@ -339,13 +345,13 @@ public class ShoyoMod {
 
     /** Tela do MP-Mod (tecla L): liga/desliga atacar (esquerdo) e colocar bloco (direito) e muda o CPS. */
     public static class ShoyoGui extends GuiScreen {
-        private GuiButton bAtk, bPlc;
+        private GuiButton bAtk, bPlc, bSpr, bGnd;
         private GuiButton[] vals = new GuiButton[4]; // atkMin, atkMax, plcMin, plcMax
 
         @Override
         public void initGui() {
             buttonList.clear();
-            int cx = width / 2, y = height / 2 - 78;
+            int cx = width / 2, y = height / 2 - 98;
             bAtk = new GuiButton(0, cx - 100, y, 200, 20, "");
             buttonList.add(bAtk);
             addRow(1, y + 24, 0);
@@ -354,7 +360,11 @@ public class ShoyoMod {
             buttonList.add(bPlc);
             addRow(6, y + 102, 2);
             addRow(8, y + 126, 3);
-            buttonList.add(new GuiButton(10, cx - 100, y + 156, 200, 20, "Pronto"));
+            bSpr = new GuiButton(11, cx - 100, y + 150, 98, 20, "");
+            bGnd = new GuiButton(12, cx + 2, y + 150, 98, 20, "");
+            buttonList.add(bSpr);
+            buttonList.add(bGnd);
+            buttonList.add(new GuiButton(10, cx - 100, y + 176, 200, 20, "Pronto"));
             refresh();
         }
 
@@ -374,6 +384,8 @@ public class ShoyoMod {
             vals[1].displayString = "CPS maximo: " + cpsMax;
             vals[2].displayString = "CPS minimo: " + pCpsMin;
             vals[3].displayString = "CPS maximo: " + pCpsMax;
+            bSpr.displayString = "So correndo: " + (placeSprint ? "SIM" : "nao");
+            bGnd.displayString = "So no chao: " + (placeGround ? "SIM" : "nao");
         }
 
         private static int clamp(int v) { return Math.max(0, Math.min(20, v)); }
@@ -391,6 +403,8 @@ public class ShoyoMod {
                 case 7: pCpsMin = clamp(pCpsMin + 1); if (pCpsMax < pCpsMin) pCpsMax = pCpsMin; break;
                 case 8: pCpsMax = clamp(pCpsMax - 1); if (pCpsMax < pCpsMin) pCpsMin = pCpsMax; break;
                 case 9: pCpsMax = clamp(pCpsMax + 1); break;
+                case 11: placeSprint = !placeSprint; break;
+                case 12: placeGround = !placeGround; break;
                 case 10: save(); mc.displayGuiScreen(null); return;
                 default: return;
             }
@@ -407,7 +421,7 @@ public class ShoyoMod {
         @Override
         public void drawScreen(int mx, int my, float pt) {
             drawDefaultBackground();
-            drawCenteredString(fontRendererObj, "MP-Mod", width / 2, height / 2 - 100, 0xFFFFFF);
+            drawCenteredString(fontRendererObj, "MP-Mod", width / 2, height / 2 - 118, 0xFFFFFF);
             super.drawScreen(mx, my, pt);
         }
 
