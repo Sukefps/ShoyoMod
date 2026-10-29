@@ -4,7 +4,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.item.EntityArmorStand;
+import net.minecraft.client.gui.GuiButton;
+import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.settings.KeyBinding;
+import java.io.IOException;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.ICommandSender;
 import net.minecraft.item.ItemBlock;
@@ -59,7 +62,7 @@ public class ShoyoMod {
     private static Configuration cfg;
 
     private static Method clickMouse;
-    private static KeyBinding kAttack, kPlace, kBreak;
+    private static KeyBinding kAttack, kPlace, kBreak, kGui;
 
     private long nextAttackNs = 0L, nextPlaceNs = 0L;
 
@@ -85,6 +88,8 @@ public class ShoyoMod {
                 kAttack = new KeyBinding("Macro atacar", Keyboard.KEY_NONE, "MP-Mod");
         kPlace = new KeyBinding("Macro colocar bloco", Keyboard.KEY_NONE, "MP-Mod");
         kBreak = new KeyBinding("Macro quebrar bloco", Keyboard.KEY_NONE, "MP-Mod");
+        kGui = new KeyBinding("Abrir menu", Keyboard.KEY_L, "MP-Mod");
+        ClientRegistry.registerKeyBinding(kGui);
         ClientRegistry.registerKeyBinding(kAttack);
         ClientRegistry.registerKeyBinding(kPlace);
         ClientRegistry.registerKeyBinding(kBreak);
@@ -134,6 +139,7 @@ public class ShoyoMod {
 
     /** "S atacar colocar break hud atkMin atkMax plcMin plcMax" */
     private static void applyRemote(String m) {
+        if (true) return; // a tela do mod (tecla L) manda nas configuracoes
         try {
             String[] a = m.split(" ");
             if (a.length < 9 || !a[0].equals("S")) return;
@@ -172,12 +178,12 @@ public class ShoyoMod {
     public void onJoin(EntityJoinWorldEvent e) {
         if (e.entity == mc.thePlayer) {
             joinedAtMs = System.currentTimeMillis();
-            say("carregado! atacar " + onOff(attack) + ", colocar " + onOff(place) + ". Use /shoyo status");
         }
     }
 
     @SubscribeEvent
     public void onKey(InputEvent.KeyInputEvent e) {
+        if (kGui.isPressed() && mc.currentScreen == null && mc.thePlayer != null) { mc.displayGuiScreen(new ShoyoGui()); return; }
         if (kAttack.isPressed()) { attack = !attack; save(); say("atacar " + onOff(attack)); }
         if (kPlace.isPressed()) { place = !place; save(); say("colocar bloco " + onOff(place)); }
         if (kBreak.isPressed()) { breakBlocks = !breakBlocks; save(); say("quebrar bloco " + onOff(breakBlocks)); }
@@ -319,12 +325,89 @@ public class ShoyoMod {
 
     @SubscribeEvent
     public void onOverlay(RenderGameOverlayEvent.Post e) {
-        boolean recent = System.currentTimeMillis() - joinedAtMs < 15000;
-        if ((!hud && !recent) || e.type != RenderGameOverlayEvent.ElementType.ALL || mc.thePlayer == null) return;
+        if (!hud || e.type != RenderGameOverlayEvent.ElementType.ALL || mc.thePlayer == null) return;
         long now = System.currentTimeMillis();
         while (!clicks.isEmpty() && now - clicks.getFirst() > 1000) clicks.removeFirst();
         mc.fontRendererObj.drawStringWithShadow("MP-Mod 1.0.1  |  CPS " + clicks.size() + "  |  total " + totalClicks, 4, 4, 0xFFFFFF);
         mc.fontRendererObj.drawStringWithShadow(stateText, 4, 16, 0xAAAAAA);
+    }
+
+    /** Tela do MP-Mod (tecla L): liga/desliga atacar (esquerdo) e colocar bloco (direito) e muda o CPS. */
+    public static class ShoyoGui extends GuiScreen {
+        private GuiButton bAtk, bPlc;
+        private GuiButton[] vals = new GuiButton[4]; // atkMin, atkMax, plcMin, plcMax
+
+        @Override
+        public void initGui() {
+            buttonList.clear();
+            int cx = width / 2, y = height / 2 - 78;
+            bAtk = new GuiButton(0, cx - 100, y, 200, 20, "");
+            buttonList.add(bAtk);
+            addRow(1, y + 24, 0);
+            addRow(3, y + 48, 1);
+            bPlc = new GuiButton(5, cx - 100, y + 78, 200, 20, "");
+            buttonList.add(bPlc);
+            addRow(6, y + 102, 2);
+            addRow(8, y + 126, 3);
+            buttonList.add(new GuiButton(10, cx - 100, y + 156, 200, 20, "Pronto"));
+            refresh();
+        }
+
+        private void addRow(int id, int y, int slot) {
+            int cx = width / 2;
+            buttonList.add(new GuiButton(id, cx - 100, y, 20, 20, "-"));
+            vals[slot] = new GuiButton(100 + slot, cx - 78, y, 156, 20, "");
+            vals[slot].enabled = false;
+            buttonList.add(vals[slot]);
+            buttonList.add(new GuiButton(id + 1, cx + 80, y, 20, 20, "+"));
+        }
+
+        private void refresh() {
+            bAtk.displayString = "Atacar (botao esquerdo): " + (attack ? "LIGADO" : "desligado");
+            bPlc.displayString = "Colocar bloco (botao direito): " + (place ? "LIGADO" : "desligado");
+            vals[0].displayString = "CPS minimo: " + cpsMin;
+            vals[1].displayString = "CPS maximo: " + cpsMax;
+            vals[2].displayString = "CPS minimo: " + pCpsMin;
+            vals[3].displayString = "CPS maximo: " + pCpsMax;
+        }
+
+        private static int clamp(int v) { return Math.max(0, Math.min(20, v)); }
+
+        @Override
+        protected void actionPerformed(GuiButton b) throws IOException {
+            switch (b.id) {
+                case 0: attack = !attack; break;
+                case 1: cpsMin = clamp(cpsMin - 1); break;
+                case 2: cpsMin = clamp(cpsMin + 1); if (cpsMax < cpsMin) cpsMax = cpsMin; break;
+                case 3: cpsMax = clamp(cpsMax - 1); if (cpsMax < cpsMin) cpsMin = cpsMax; break;
+                case 4: cpsMax = clamp(cpsMax + 1); break;
+                case 5: place = !place; break;
+                case 6: pCpsMin = clamp(pCpsMin - 1); break;
+                case 7: pCpsMin = clamp(pCpsMin + 1); if (pCpsMax < pCpsMin) pCpsMax = pCpsMin; break;
+                case 8: pCpsMax = clamp(pCpsMax - 1); if (pCpsMax < pCpsMin) pCpsMin = pCpsMax; break;
+                case 9: pCpsMax = clamp(pCpsMax + 1); break;
+                case 10: save(); mc.displayGuiScreen(null); return;
+                default: return;
+            }
+            save();
+            refresh();
+        }
+
+        @Override
+        protected void keyTyped(char c, int code) throws IOException {
+            if (code == kGui.getKeyCode()) { save(); mc.displayGuiScreen(null); return; }
+            super.keyTyped(c, code);
+        }
+
+        @Override
+        public void drawScreen(int mx, int my, float pt) {
+            drawDefaultBackground();
+            drawCenteredString(fontRendererObj, "MP-Mod", width / 2, height / 2 - 100, 0xFFFFFF);
+            super.drawScreen(mx, my, pt);
+        }
+
+        @Override
+        public boolean doesGuiPauseGame() { return false; }
     }
 
     public static class ShoyoCommand extends CommandBase {
