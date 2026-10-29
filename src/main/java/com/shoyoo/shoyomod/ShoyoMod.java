@@ -58,7 +58,7 @@ public class ShoyoMod {
     private static volatile int pCpsMin = 6, pCpsMax = 8;     // colocar bloco
     private static Configuration cfg;
 
-    private static Method clickMouse, rightClickMouse;
+    private static Method clickMouse;
     private static KeyBinding kAttack, kPlace, kBreak;
 
     private long nextAttackNs = 0L, nextPlaceNs = 0L;
@@ -82,8 +82,7 @@ public class ShoyoMod {
     @EventHandler
     public void init(FMLInitializationEvent e) {
         clickMouse = ReflectionHelper.findMethod(Minecraft.class, mc, new String[]{"clickMouse", "func_147116_af"});
-        rightClickMouse = ReflectionHelper.findMethod(Minecraft.class, mc, new String[]{"rightClickMouse", "func_147121_ag"});
-        kAttack = new KeyBinding("Macro atacar", Keyboard.KEY_NONE, "MP-Mod");
+                kAttack = new KeyBinding("Macro atacar", Keyboard.KEY_NONE, "MP-Mod");
         kPlace = new KeyBinding("Macro colocar bloco", Keyboard.KEY_NONE, "MP-Mod");
         kBreak = new KeyBinding("Macro quebrar bloco", Keyboard.KEY_NONE, "MP-Mod");
         ClientRegistry.registerKeyBinding(kAttack);
@@ -231,21 +230,54 @@ public class ShoyoMod {
                 invoke(clickMouse);
             }
         }
+    }
 
-        // COLOCAR BLOCO: segurando o botao e com bloco na mao
-        ItemStack held = ready ? mc.thePlayer.getHeldItem() : null;
-        boolean doPlace = ready && place && Math.max(pCpsMin, pCpsMax) > 0 && isDown(mc.gameSettings.keyBindUseItem)
-                && held != null && held.getItem() instanceof ItemBlock && !mc.thePlayer.isUsingItem();
-        if (!doPlace) {
-            nextPlaceNs = 0L;
-        } else {
-            if (nextPlaceNs == 0L) nextPlaceNs = now;
-            if (now >= nextPlaceNs) {
-                nextPlaceNs += intervalNs(true);
-                if (nextPlaceNs < now) nextPlaceNs = now + intervalNs(true);
-                invoke(rightClickMouse);
-            }
+    // ---- COLOCAR BLOCO RAPIDO: nao clica; so encurta o tempo de espera do clique direito do proprio jogo.
+    // Quem coloca o bloco e o jogo, pelo caminho normal (compativel com agachar/safe walk). ----
+    private static java.lang.reflect.Field delayField;
+    private int placeTarget = 4;
+
+    private static java.lang.reflect.Field delayField() {
+        if (delayField != null) return delayField;
+        for (String n : new String[]{"rightClickDelayTimer", "field_71467_ac"}) {
+            try {
+                java.lang.reflect.Field f = Minecraft.class.getDeclaredField(n);
+                f.setAccessible(true);
+                delayField = f;
+                return f;
+            } catch (Throwable ignored) { }
         }
+        return null;
+    }
+
+    private int pickPlaceDelayTicks() {
+        int hi = Math.max(pCpsMin, pCpsMax), lo = Math.max(1, Math.min(pCpsMin, pCpsMax));
+        double cps = lo + rnd.nextDouble() * (hi - lo);
+        double t = 20.0 / Math.max(cps, 1.0);
+        int n = (int) Math.floor(t);
+        if (rnd.nextDouble() < t - n) n++;
+        return Math.max(1, Math.min(4, n));
+    }
+
+    @SubscribeEvent
+    public void onTick(TickEvent.ClientTickEvent e) {
+        if (e.phase != TickEvent.Phase.START) return;
+        if (!place || Math.max(pCpsMin, pCpsMax) <= 0 || mc.thePlayer == null || mc.theWorld == null || mc.currentScreen != null) return;
+        if (!mc.gameSettings.keyBindUseItem.isKeyDown()) return;
+        ItemStack held = mc.thePlayer.getHeldItem();
+        if (held == null || !(held.getItem() instanceof ItemBlock) || mc.thePlayer.isUsingItem()) return;
+        java.lang.reflect.Field f = delayField();
+        if (f == null) return;
+        try {
+            int cur = f.getInt(mc);
+            if (cur == 0) {            // o jogo vai colocar neste tick: sorteia o proximo intervalo
+                placeTarget = pickPlaceDelayTicks();
+                clicks.addLast(System.currentTimeMillis());
+                totalClicks++;
+            } else if (cur > placeTarget) {
+                f.setInt(mc, placeTarget);
+            }
+        } catch (Throwable ignored) { }
     }
 
     /** Tem mob/jogador vivo (nao armor stand) a ate "radius" blocos? Verificado a cada 100 ms. */
