@@ -19,7 +19,8 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 
 /**
- * MP-Mod: so DETECTA. Nao clica, nao desenha nada na tela e nao mexe no jogo.
+ * MP-Mod: DETECTA e, se o launcher pedir, liga o FAST PLACE (como no Lunar: tira a espera do clique direito).
+ * Nao clica por conta propria e nao desenha nada na tela.
  * Avisa o SHOYO LAUNCHER (UDP local, porta 47653) com 4 caracteres:
  *   1: mirando num bloco | 2: bloco na mao | 3: comendo/bebendo/usando item (ou comida/pocao/arco na mao) | 4: quebrando bloco.
  * Quem da os cliques e o launcher; ele pausa quando voce mira num bloco, quebra bloco ou come.
@@ -29,11 +30,31 @@ import java.net.InetAddress;
 public class ShoyoMod {
     private static final Minecraft mc = Minecraft.getMinecraft();
     private static final int PORT_TO_LAUNCHER = 47653;
+    private static final int PORT_FROM_LAUNCHER = 47654;
     private static volatile String stateCode = "0000";
+    private static volatile boolean fastPlace = false;
+    private static java.lang.reflect.Field delayField;
 
     @EventHandler
     public void init(FMLInitializationEvent e) {
         MinecraftForge.EVENT_BUS.register(this);
+        Thread rx = new Thread(new Runnable() {
+            public void run() {
+                try {
+                    DatagramSocket sock = new DatagramSocket(PORT_FROM_LAUNCHER, InetAddress.getByName("127.0.0.1"));
+                    byte[] buf = new byte[64];
+                    DatagramPacket p = new DatagramPacket(buf, buf.length);
+                    while (true) {
+                        p.setLength(buf.length);
+                        sock.receive(p);
+                        String m = new String(buf, 0, p.getLength(), "US-ASCII").trim();
+                        if (m.startsWith("F ")) fastPlace = m.charAt(2) == '1'; // "F 1" liga, "F 0" desliga
+                    }
+                } catch (Throwable ignored) { }
+            }
+        }, "MP-Mod link rx");
+        rx.setDaemon(true);
+        rx.start();
         Thread hb = new Thread(new Runnable() {
             public void run() {
                 try {
@@ -65,5 +86,33 @@ public class ShoyoMod {
         boolean usingAny = usingItem || (held != null && (held.getItem() instanceof ItemFood
                 || held.getItem() instanceof ItemPotion || held.getItem() instanceof ItemBow));
         stateCode = (aimBlock ? "1" : "0") + (holdsBlock ? "1" : "0") + (usingAny ? "1" : "0") + (mining ? "1" : "0");
+    }
+
+    private static java.lang.reflect.Field delayField() {
+        if (delayField != null) return delayField;
+        for (String n : new String[]{"rightClickDelayTimer", "field_71467_ac"}) {
+            try {
+                java.lang.reflect.Field f = Minecraft.class.getDeclaredField(n);
+                f.setAccessible(true);
+                delayField = f;
+                return f;
+            } catch (Throwable ignored) { }
+        }
+        return null;
+    }
+
+    /** Fast place: com bloco na mao e o botao de usar segurado, zera a espera entre colocacoes (o jogo coloca pelo caminho normal). */
+    @SubscribeEvent
+    public void onTick(TickEvent.ClientTickEvent e) {
+        if (e.phase != TickEvent.Phase.START || !fastPlace) return;
+        if (mc.thePlayer == null || mc.theWorld == null || mc.currentScreen != null) return;
+        if (!mc.gameSettings.keyBindUseItem.isKeyDown()) return;
+        ItemStack held = mc.thePlayer.getHeldItem();
+        if (held == null || !(held.getItem() instanceof ItemBlock) || mc.thePlayer.isUsingItem()) return;
+        java.lang.reflect.Field f = delayField();
+        if (f == null) return;
+        try {
+            if (f.getInt(mc) > 0) f.setInt(mc, 0);
+        } catch (Throwable ignored) { }
     }
 }
