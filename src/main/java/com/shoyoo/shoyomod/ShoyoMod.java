@@ -75,6 +75,7 @@ public class ShoyoMod {
     @SubscribeEvent
     public void onRender(TickEvent.RenderTickEvent e) {
         if (e.phase != TickEvent.Phase.START) return;
+        fastPlaceNow();
         boolean ready = mc.thePlayer != null && mc.theWorld != null && mc.currentScreen == null;
         if (!ready) { stateCode = "0000"; return; }
         MovingObjectPosition mop = mc.objectMouseOver;
@@ -102,9 +103,8 @@ public class ShoyoMod {
     }
 
     /** Fast place: com bloco na mao e o botao de usar segurado, zera a espera entre colocacoes (o jogo coloca pelo caminho normal). */
-    @SubscribeEvent
-    public void onTick(TickEvent.ClientTickEvent e) {
-        if (e.phase != TickEvent.Phase.START || !fastPlace) return;
+    private static void fastPlaceNow() {
+        if (!fastPlace) return;
         if (mc.thePlayer == null || mc.theWorld == null || mc.currentScreen != null) return;
         if (!mc.gameSettings.keyBindUseItem.isKeyDown()) return;
         ItemStack held = mc.thePlayer.getHeldItem();
@@ -114,5 +114,11 @@ public class ShoyoMod {
         try {
             if (f.getInt(mc) > 0) f.setInt(mc, 0);
         } catch (Throwable ignored) { }
+    }
+
+    @SubscribeEvent
+    public void onTick(TickEvent.ClientTickEvent e) {
+        if (e.phase != TickEvent.Phase.START) return;
+        fastPlaceNow();
     }
 }
