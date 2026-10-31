@@ -33,6 +33,8 @@ public class ShoyoMod {
     private static final int PORT_FROM_LAUNCHER = 47654;
     private static volatile String stateCode = "0000";
     private static volatile boolean fastPlace = false;
+    private static volatile boolean noHitDelay = false;
+    private static java.lang.reflect.Field clickCounterField;
     private static java.lang.reflect.Field delayField;
 
     @EventHandler
@@ -48,7 +50,12 @@ public class ShoyoMod {
                         p.setLength(buf.length);
                         sock.receive(p);
                         String m = new String(buf, 0, p.getLength(), "US-ASCII").trim();
-                        if (m.startsWith("F ")) fastPlace = m.charAt(2) == '1'; // "F 1" liga, "F 0" desliga
+                        if (m.startsWith("F ")) {
+                            // formato: "F <0|1> H <0|1>"
+                            fastPlace = m.length() > 2 && m.charAt(2) == '1';
+                            int h = m.indexOf(" H ");
+                            noHitDelay = h >= 0 && h + 3 < m.length() && m.charAt(h + 3) == '1';
+                        }
                     }
                 } catch (Throwable ignored) { }
             }
@@ -103,9 +110,28 @@ public class ShoyoMod {
     }
 
     /** Fast place: com bloco na mao e o botao de usar segurado, zera a espera entre colocacoes (o jogo coloca pelo caminho normal). */
+    private static java.lang.reflect.Field clickCounterField() {
+        if (clickCounterField != null) return clickCounterField;
+        for (String n : new String[]{"leftClickCounter", "field_71429_W"}) {
+            try {
+                java.lang.reflect.Field f = Minecraft.class.getDeclaredField(n);
+                f.setAccessible(true);
+                clickCounterField = f;
+                return f;
+            } catch (Throwable ignored) { }
+        }
+        return null;
+    }
+
     private static void fastPlaceNow() {
-        if (!fastPlace) return;
+        if (!fastPlace && !noHitDelay) return;
         if (mc.thePlayer == null || mc.theWorld == null || mc.currentScreen != null) return;
+        if (noHitDelay && mc.gameSettings.keyBindAttack.isKeyDown()) {
+            java.lang.reflect.Field c = clickCounterField();
+            if (c != null) {
+                try { if (c.getInt(mc) > 0) c.setInt(mc, 0); } catch (Throwable ignored) { }
+            }
+        }
         if (!mc.gameSettings.keyBindUseItem.isKeyDown()) return;
         ItemStack held = mc.thePlayer.getHeldItem();
         if (held == null || !(held.getItem() instanceof ItemBlock) || mc.thePlayer.isUsingItem()) return;
